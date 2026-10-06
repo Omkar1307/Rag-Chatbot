@@ -1,11 +1,12 @@
 package com.om.rag_chatbot.service;
 
 import com.om.rag_chatbot.entity.Document;
+import com.om.rag_chatbot.entity.DocumentChunk;
 import com.om.rag_chatbot.entity.DocumentStatus;
+import com.om.rag_chatbot.repository.DocumentChunkRepository;
 import com.om.rag_chatbot.repository.DocumentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,18 +17,21 @@ import java.util.UUID;
 @Service
 public class DocumentService {
 
+
     private final DocumentRepository documentRepository;
     private final PdfTextExtractorService pdfTextExtractorService;
-
+    private final TextChunkingService textChunkingService;
+    private final DocumentChunkRepository documentChunkRepository;
     private final Path uploadDirectory =
             Paths.get("uploads");
 
     public DocumentService(
             DocumentRepository documentRepository,
-            PdfTextExtractorService pdfTextExtractorService) {
-
+            PdfTextExtractorService pdfTextExtractorService,TextChunkingService textChunkingService, DocumentChunkRepository documentChunkRepository) {
+        this.documentChunkRepository = documentChunkRepository;
         this.documentRepository = documentRepository;
         this.pdfTextExtractorService = pdfTextExtractorService;
+        this.textChunkingService =textChunkingService;
     }
 
 
@@ -60,14 +64,25 @@ public class DocumentService {
 
         Document savedDocument = documentRepository.save(document);
 
-        // Extract text from PDF
         String extractedText =
                 pdfTextExtractorService.extractText(filePath);
 
-        System.out.println("========== EXTRACTED TEXT ==========");
-        System.out.println(extractedText);
-        System.out.println("====================================");
+        List<String> chunks =
+                textChunkingService.chunkText(extractedText);
 
+        System.out.println("Total chunks created: " + chunks.size());
+
+        for (int i = 0; i < chunks.size(); i++) {
+
+            DocumentChunk documentChunk = new DocumentChunk();
+
+            documentChunk.setDocument(savedDocument);
+            documentChunk.setChunkIndex(i);
+            documentChunk.setContent(chunks.get(i));
+
+            documentChunkRepository.save(documentChunk);
+        }
+        // Processing completed
         savedDocument.setStatus(DocumentStatus.PROCESSED);
 
         return documentRepository.save(savedDocument);
